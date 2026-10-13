@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
+import android.media.AudioManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -101,13 +102,21 @@ class AppBlockerService : AccessibilityService() {
   }
 
   private fun onUnlocked() {
-    if (!config.enabled || !config.unlockChallenge) return
+    if (!config.enabled || !config.unlockChallenge || isInCall()) return
     BlockerState.unlockPending = true
     val fg = BlockerState.foreground
     launchChallenge(
       ChallengeReason.UNLOCK,
       if (fg != null && fg !in launchers && fg !in protected) fg else null,
     )
+  }
+
+  /** Never interrupt a phone or VoIP call with an unlock challenge. */
+  private fun isInCall(): Boolean {
+    val audio = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return false
+    return audio.mode == AudioManager.MODE_IN_CALL ||
+      audio.mode == AudioManager.MODE_IN_COMMUNICATION ||
+      audio.mode == AudioManager.MODE_RINGTONE
   }
 
   private fun launchChallenge(reason: ChallengeReason, pkg: String?) {
