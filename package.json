@@ -1,5 +1,5 @@
 {
-  "name": "ChessLock",
+  "name": "chesslock",
   "version": "0.0.1",
   "private": true,
   "scripts": {
@@ -38,5 +38,13 @@
   },
   "engines": {
     "node": ">= 22.11.0"
+  },
+  "codegenConfig": {
+    "name": "ChessLockSpec",
+    "type": "modules",
+    "jsSrcsDir": "specs",
+    "android": {
+      "javaPackageName": "com.chesslock"
+    }
   }
 }
