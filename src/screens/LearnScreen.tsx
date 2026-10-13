@@ -104,11 +104,7 @@ function CourseDetail({
             <View style={{ flex: 1 }}>
               <Text style={styles.lineName}>{d.name}</Text>
               <Text style={styles.lineMoves} numberOfLines={1}>
-                {d.moves
-                  .slice(0, 8)
-                  .map((m, j) => (j % 2 === 0 ? `${j / 2 + 1}.${m}` : m))
-                  .join(' ')}
-                {d.moves.length > 8 ? ' …' : ''}
+                {tailMoves(d.moves)}
               </Text>
             </View>
             {stat ? (
@@ -121,6 +117,19 @@ function CourseDetail({
       })}
     </Card>
   );
+}
+
+/** The last moves of a line (where variations differ), e.g. "… 6.Bg5 e6 7.f4 Be7". */
+function tailMoves(moves: string[], count = 8): string {
+  const start = Math.max(0, moves.length - count);
+  const parts = moves.slice(start).map((m, k) => {
+    const ply = start + k;
+    if (ply % 2 === 0) {
+      return `${ply / 2 + 1}.${m}`;
+    }
+    return k === 0 ? `${(ply + 1) / 2}...${m}` : m;
+  });
+  return (start > 0 ? '… ' : '') + parts.join(' ');
 }
 
 function ThemeList({ onPractice }: { onPractice: (r: PracticeRequest) => void }) {
