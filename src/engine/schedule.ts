@@ -63,9 +63,10 @@ export interface ThemeFocus {
 
 export function themeFocus(settings: Settings, day = dayNumber()): ThemeFocus {
   const list = enabledThemes(settings);
-  const block = Math.floor(day / DAYS_PER_THEME) + settings.themeOffset;
+  const since = Math.max(0, day - settings.startDay);
+  const block = Math.floor(since / DAYS_PER_THEME) + settings.themeOffset;
   const idx = ((block % list.length) + list.length) % list.length;
-  const dayInBlock = (day % DAYS_PER_THEME) + 1;
+  const dayInBlock = (since % DAYS_PER_THEME) + 1;
   return {
     theme: list[idx],
     dayInBlock,
@@ -110,7 +111,7 @@ export interface OpeningFocus {
 
 export function openingFocus(settings: Settings, day = dayNumber()): OpeningFocus {
   const cycle = courseCycle(settings.openingSide);
-  const w = weekNumber(day) + settings.courseOffset;
+  const w = weekNumber(day) - weekNumber(Math.min(day, settings.startDay)) + settings.courseOffset;
   const idx = ((w % cycle.length) + cycle.length) % cycle.length;
   const course = cycle[idx];
   const dayIndex = weekday(day);

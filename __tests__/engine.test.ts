@@ -52,6 +52,16 @@ describe('schedule', () => {
     expect(courseCycle('both')).toHaveLength(ALL_COURSES.length);
   });
 
+  it('starts the curriculum and course cycle on the onboarding day', () => {
+    const start = dayNumber(new Date(2026, 9, 14)); // a Wednesday
+    const s = { ...settings, startDay: start };
+    expect(themeFocus(s, start).theme.id).toBe(THEMES[0].id);
+    expect(themeFocus(s, start).dayInBlock).toBe(1);
+    expect(themeFocus(s, start + 3).theme.id).toBe(THEMES[1].id);
+    expect(openingFocus(s, start).course.id).toBe(courseCycle('both')[0].id);
+    expect(openingFocus(s, start + 5).course.id).toBe(courseCycle('both')[1].id); // next Monday
+  });
+
   it('skipping moves to the next theme', () => {
     const day = 30000;
     const a = themeFocus(settings, day);

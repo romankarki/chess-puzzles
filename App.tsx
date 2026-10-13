@@ -19,13 +19,14 @@ import SettingsScreen, { LEVELS } from './src/screens/SettingsScreen';
 import TrainingSession from './src/components/TrainingSession';
 import { Button, Card, Segmented } from './src/components/ui';
 import { colors } from './src/theme';
+import { dayNumber } from './src/engine/schedule';
 
 type Tab = 'home' | 'learn' | 'apps' | 'settings';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'home', label: 'Today', icon: '♞' },
   { id: 'learn', label: 'Learn', icon: '♜' },
-  { id: 'apps', label: 'Apps', icon: '⛔' },
+  { id: 'apps', label: 'Apps', icon: '⊘' },
   { id: 'settings', label: 'Settings', icon: '⚙' },
 ];
 
@@ -186,7 +187,7 @@ function Onboarding() {
           style={{ marginTop: 32 }}
           onPress={() => {
             updateProgress(p => ({ ...p, rating }));
-            updateSettings({ mode, onboarded: true });
+            updateSettings({ mode, onboarded: true, startDay: dayNumber() });
           }}
         />
       </ScrollView>

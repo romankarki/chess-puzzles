@@ -14,6 +14,8 @@ export interface Settings {
   courseOffset: number;
   disabledThemes: string[];
   onboarded: boolean;
+  /** Day number of onboarding: the curriculum and course cycle start here. */
+  startDay: number;
 }
 
 export interface ThemeStat {
@@ -65,6 +67,7 @@ export const DEFAULT_SETTINGS: Settings = {
   courseOffset: 0,
   disabledThemes: [],
   onboarded: false,
+  startDay: 0,
 };
 
 export const DEFAULT_PROGRESS: Progress = {
