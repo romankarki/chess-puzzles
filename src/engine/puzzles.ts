@@ -12,6 +12,8 @@ export interface Puzzle {
   moves: string[];
   rating: number;
   theme: string;
+  /** 'review': revision of an older theme; 'retry': a puzzle you missed before. */
+  source?: 'review' | 'retry';
 }
 
 let data: Record<string, RawPuzzle[]> | null = null;
@@ -52,22 +54,56 @@ export function pickPuzzle(theme: string, target: number, seen: string[]): Puzzl
   return toPuzzle(top[Math.floor(Math.random() * top.length)], theme);
 }
 
+export function puzzleById(theme: string, id: string): Puzzle | null {
+  const raw = db()[theme]?.find(p => p[0] === id);
+  return raw ? toPuzzle(raw, theme) : null;
+}
+
 function toPuzzle(raw: RawPuzzle, theme: string): Puzzle {
   return { id: raw[0], fen: raw[1], moves: raw[2].split(' '), rating: raw[3], theme };
 }
 
 /**
- * Difficulty ramps up during the 3 days of a theme: day 1 is a little easier
- * than your rating, day 3 a little harder.
+ * Difficulty to aim for: your skill in the theme, nudged by `form` (see
+ * formAdjustment) while you are on a run of solves or misses.
  */
-export function targetRating(rating: number, dayInBlock: number): number {
-  return Math.round(rating + (dayInBlock - 2) * 60);
+export function targetRating(skill: number, form = 0): number {
+  return Math.round(skill + form);
+}
+
+const RECENT = 12;
+/** Aim for ~70% clean solves: hard enough to learn, easy enough to keep going. */
+const TARGET_SUCCESS = 0.7;
+
+/**
+ * Short-term difficulty shift from your latest results: up to +100 on a hot
+ * streak, down to -120 when puzzles keep going wrong.
+ */
+export function formAdjustment(recent: number[]): number {
+  if (recent.length < 4) {
+    return 0;
+  }
+  const rate = recent.reduce((a, b) => a + b, 0) / recent.length;
+  return Math.round(Math.min(100, Math.max(-120, (rate - TARGET_SUCCESS) * 400)));
+}
+
+/**
+ * Your strength in one theme: the overall rating blended with the theme's own
+ * rating, trusting the theme rating more as you play more of it (up to 50%).
+ */
+export function themeSkill(progress: Progress, theme: string): number {
+  const stat = progress.themeStats[theme];
+  const n = stat ? stat.solved + stat.failed : 0;
+  if (!stat?.rating || n === 0) {
+    return progress.rating;
+  }
+  const w = Math.min(n, 10) / 20;
+  return Math.round(progress.rating * (1 - w) + stat.rating * w);
 }
 
 /** Elo-style update. A puzzle counts as solved only without mistakes or hints. */
-export function newRating(rating: number, puzzleRating: number, solved: boolean): number {
+export function newRating(rating: number, puzzleRating: number, solved: boolean, k = 28): number {
   const expected = 1 / (1 + Math.pow(10, (puzzleRating - rating) / 400));
-  const k = 28;
   const next = rating + k * ((solved ? 1 : 0) - expected);
   return Math.round(Math.min(MAX_RATING, Math.max(MIN_RATING, next)));
 }
@@ -88,23 +124,49 @@ export function bumpDay(p: Progress, field: keyof DayLog, by = 1): Progress {
   return { ...p, daily, streak };
 }
 
-export function recordPuzzle(puzzle: Puzzle, solvedClean: boolean) {
-  updateProgress(p => {
-    const stat = p.themeStats[puzzle.theme] ?? { solved: 0, failed: 0 };
-    const next: Progress = {
-      ...p,
-      rating: newRating(p.rating, puzzle.rating, solvedClean),
-      puzzlesSolved: p.puzzlesSolved + (solvedClean ? 1 : 0),
-      puzzlesFailed: p.puzzlesFailed + (solvedClean ? 0 : 1),
-      seen: rememberSeen(p.seen, puzzle.id),
-      themeStats: {
-        ...p.themeStats,
-        [puzzle.theme]: {
-          solved: stat.solved + (solvedClean ? 1 : 0),
-          failed: stat.failed + (solvedClean ? 0 : 1),
-        },
+const MAX_MISSED = 150;
+
+export function applyPuzzleResult(
+  p: Progress,
+  puzzle: Puzzle,
+  solvedClean: boolean,
+  today = dayNumber(),
+): Progress {
+  const stat = p.themeStats[puzzle.theme] ?? { solved: 0, failed: 0 };
+  const touched = {
+    ...stat,
+    lastDay: today,
+    todayCount: (stat.lastDay === today ? stat.todayCount ?? 0 : 0) + 1,
+  };
+  const others = p.missed.filter(m => m.id !== puzzle.id);
+  const missed = solvedClean
+    ? others
+    : [...others, { id: puzzle.id, theme: puzzle.theme, day: today }].slice(-MAX_MISSED);
+
+  if (puzzle.source === 'retry') {
+    // You have seen this one before: it counts for revision, not for rating.
+    return { ...p, missed, themeStats: { ...p.themeStats, [puzzle.theme]: touched } };
+  }
+  return {
+    ...p,
+    rating: newRating(p.rating, puzzle.rating, solvedClean),
+    puzzlesSolved: p.puzzlesSolved + (solvedClean ? 1 : 0),
+    puzzlesFailed: p.puzzlesFailed + (solvedClean ? 0 : 1),
+    seen: rememberSeen(p.seen, puzzle.id),
+    recent: [...p.recent, solvedClean ? 1 : 0].slice(-RECENT),
+    missed,
+    themeStats: {
+      ...p.themeStats,
+      [puzzle.theme]: {
+        ...touched,
+        solved: stat.solved + (solvedClean ? 1 : 0),
+        failed: stat.failed + (solvedClean ? 0 : 1),
+        rating: newRating(stat.rating ?? p.rating, puzzle.rating, solvedClean, 36),
       },
-    };
-    return bumpDay(next, 'puzzles');
-  });
+    },
+  };
+}
+
+export function recordPuzzle(puzzle: Puzzle, solvedClean: boolean) {
+  updateProgress(p => bumpDay(applyPuzzleResult(p, puzzle, solvedClean), 'puzzles'));
 }

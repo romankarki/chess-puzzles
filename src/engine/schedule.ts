@@ -1,6 +1,6 @@
 import openingsData from '../data/openings.json';
-import { THEMES, ThemeInfo } from '../data/themes';
-import type { OpeningSide, Settings } from '../storage/store';
+import { THEME_BY_ID, THEMES, ThemeInfo } from '../data/themes';
+import type { Settings } from '../storage/store';
 
 export type Color = 'w' | 'b';
 
@@ -24,6 +24,14 @@ export interface Course {
 
 export const ALL_COURSES: Course[] = (openingsData as { courses: Course[] }).courses;
 
+export function courseById(id: string): Course {
+  return ALL_COURSES.find(c => c.id === id) ?? ALL_COURSES[0];
+}
+
+export function themeById(id: string): ThemeInfo {
+  return THEME_BY_ID[id] ?? THEMES[0];
+}
+
 /** Days since 1970-01-01 in the phone's local time zone. */
 export function dayNumber(date = new Date()): number {
   return Math.floor(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 86400000);
@@ -40,87 +48,45 @@ export function weekday(day: number): number {
   return (day + 3) % 7;
 }
 
+/** Weeks start on Monday. */
 export function weekNumber(day: number): number {
   return Math.floor((day + 3) / 7);
 }
 
-// ───────────────────────── Puzzles: 3 days per theme ─────────────────────────
+export const WEEKDAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-export const DAYS_PER_THEME = 3;
-
-export function enabledThemes(settings: Settings): ThemeInfo[] {
-  const list = THEMES.filter(t => !settings.disabledThemes.includes(t.id));
-  return list.length ? list : THEMES;
+/** Sunday revises what you learned during the week (when enabled). */
+export function isReviewDay(settings: Settings, day = dayNumber()): boolean {
+  return settings.sundayReview && weekday(day) === 6;
 }
 
-export interface ThemeFocus {
+/** True once a new week has started since the focus was last picked. */
+export function needsNewPick(settings: Settings, day = dayNumber()): boolean {
+  return weekNumber(day) > settings.pickedWeek;
+}
+
+export interface WeekFocus {
   theme: ThemeInfo;
-  /** 1..3 */
-  dayInBlock: number;
-  daysLeft: number;
-  next: ThemeInfo;
-}
-
-export function themeFocus(settings: Settings, day = dayNumber()): ThemeFocus {
-  const list = enabledThemes(settings);
-  const since = Math.max(0, day - settings.startDay);
-  const block = Math.floor(since / DAYS_PER_THEME) + settings.themeOffset;
-  const idx = ((block % list.length) + list.length) % list.length;
-  const dayInBlock = (since % DAYS_PER_THEME) + 1;
-  return {
-    theme: list[idx],
-    dayInBlock,
-    daysLeft: DAYS_PER_THEME - dayInBlock + 1,
-    next: list[(idx + 1) % list.length],
-  };
-}
-
-// ───────────────────── Openings: one course per week, one line per day ─────────────────────
-
-/** Courses in teaching order: easier first, alternating White and Black. */
-export function courseCycle(side: OpeningSide): Course[] {
-  const byLevel = (a: Course, b: Course) => a.level - b.level;
-  const white = ALL_COURSES.filter(c => c.color === 'w').sort(byLevel);
-  const black = ALL_COURSES.filter(c => c.color === 'b').sort(byLevel);
-  if (side === 'w') {
-    return white;
-  }
-  if (side === 'b') {
-    return black;
-  }
-  const out: Course[] = [];
-  for (let i = 0; i < Math.max(white.length, black.length); i++) {
-    if (i < white.length) {
-      out.push(white[i]);
-    }
-    if (i < black.length) {
-      out.push(black[i]);
-    }
-  }
-  return out;
-}
-
-export interface OpeningFocus {
   course: Course;
+  /** 0..6 — the course variation taught today (Monday = first). */
   dayIndex: number;
   line: OpeningLine;
-  /** Days left this week, including today. */
-  daysLeft: number;
-  next: Course;
+  review: boolean;
 }
 
-export function openingFocus(settings: Settings, day = dayNumber()): OpeningFocus {
-  const cycle = courseCycle(settings.openingSide);
-  const w = weekNumber(day) - weekNumber(Math.min(day, settings.startDay)) + settings.courseOffset;
-  const idx = ((w % cycle.length) + cycle.length) % cycle.length;
-  const course = cycle[idx];
+/**
+ * What to train today: the week's chosen theme and course, with one variation
+ * of the course per weekday.
+ */
+export function weekFocus(settings: Settings, day = dayNumber()): WeekFocus {
+  const course = courseById(settings.weekCourse);
   const dayIndex = weekday(day);
   return {
+    theme: themeById(settings.weekTheme),
     course,
     dayIndex,
     line: course.days[dayIndex % course.days.length],
-    daysLeft: 7 - dayIndex,
-    next: cycle[(idx + 1) % cycle.length],
+    review: isReviewDay(settings, day),
   };
 }
 

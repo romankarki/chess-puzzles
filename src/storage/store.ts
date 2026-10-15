@@ -2,25 +2,40 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 
 export type TrainingMode = 'puzzles' | 'openings' | 'mixed';
-export type OpeningSide = 'both' | 'w' | 'b';
 
 export interface Settings {
   mode: TrainingMode;
   puzzlesPerChallenge: number;
-  openingSide: OpeningSide;
-  /** Shifts the 3-day theme cycle ("skip theme"). */
-  themeOffset: number;
-  /** Shifts the weekly course cycle ("skip opening"). */
-  courseOffset: number;
-  disabledThemes: string[];
+  /** This week's puzzle theme (see data/themes). */
+  weekTheme: string;
+  /** This week's opening course id (see data/openings.json). */
+  weekCourse: string;
+  /** Week number (see engine/schedule weekNumber) when the focus was last picked. */
+  pickedWeek: number;
+  /** Sunday revises older material instead of teaching new lines. */
+  sundayReview: boolean;
+  /** Monday-morning notification to pick the week's focus. */
+  mondayReminder: boolean;
   onboarded: boolean;
-  /** Day number of onboarding: the curriculum and course cycle start here. */
-  startDay: number;
 }
 
 export interface ThemeStat {
   solved: number;
   failed: number;
+  /** Elo-style rating for this theme alone (starts at the overall rating). */
+  rating?: number;
+  /** Day number of the last puzzle of this theme. */
+  lastDay?: number;
+  /** Puzzles of this theme on lastDay. */
+  todayCount?: number;
+}
+
+/** A puzzle you missed, retried on revision days. */
+export interface MissedPuzzle {
+  id: string;
+  theme: string;
+  /** Day number it was (last) missed. */
+  day: number;
 }
 
 export interface LineStat {
@@ -51,6 +66,10 @@ export interface Progress {
   streak: { count: number; lastDay: number };
   /** Alternates puzzle/opening challenges in mixed mode. */
   challengeCounter: number;
+  /** Latest puzzle results (1 = clean solve, most recent last); drives difficulty. */
+  recent: number[];
+  /** Missed puzzles waiting for a retry, oldest first. */
+  missed: MissedPuzzle[];
 }
 
 export interface State {
@@ -62,12 +81,12 @@ export interface State {
 export const DEFAULT_SETTINGS: Settings = {
   mode: 'puzzles',
   puzzlesPerChallenge: 1,
-  openingSide: 'both',
-  themeOffset: 0,
-  courseOffset: 0,
-  disabledThemes: [],
+  weekTheme: 'mateIn1',
+  weekCourse: 'italian',
+  pickedWeek: 0,
+  sundayReview: true,
+  mondayReminder: true,
   onboarded: false,
-  startDay: 0,
 };
 
 export const DEFAULT_PROGRESS: Progress = {
@@ -80,6 +99,8 @@ export const DEFAULT_PROGRESS: Progress = {
   daily: {},
   streak: { count: 0, lastDay: 0 },
   challengeCounter: 0,
+  recent: [],
+  missed: [],
 };
 
 const KEY_SETTINGS = 'chesslock.settings.v1';
@@ -102,6 +123,17 @@ export function getState(): State {
   return state;
 }
 
+/** Only known settings survive a load, so fields from older versions fall away. */
+function pickSettings(raw: Record<string, unknown>): Settings {
+  const out = { ...DEFAULT_SETTINGS } as Record<string, unknown>;
+  for (const key of Object.keys(DEFAULT_SETTINGS)) {
+    if (key in raw && typeof raw[key] === typeof out[key]) {
+      out[key] = raw[key];
+    }
+  }
+  return out as unknown as Settings;
+}
+
 /** Loads persisted state once; safe to call from several screens. */
 export function loadState(): Promise<void> {
   if (!loading) {
@@ -113,7 +145,7 @@ export function loadState(): Promise<void> {
         ]);
         state = {
           loaded: true,
-          settings: { ...DEFAULT_SETTINGS, ...(s ? JSON.parse(s) : {}) },
+          settings: pickSettings(s ? JSON.parse(s) : {}),
           progress: { ...DEFAULT_PROGRESS, ...(p ? JSON.parse(p) : {}) },
         };
       } catch (e) {
