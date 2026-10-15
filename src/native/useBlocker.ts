@@ -4,7 +4,7 @@ import { BlockerConfig, ChessLock, ProtectedApps } from './ChessLock';
 
 const DEFAULT_CONFIG: BlockerConfig = {
   enabled: false,
-  unlockChallenge: true,
+  unlockChallenge: false,
   blockedPackages: [],
   graceMinutes: 0,
 };

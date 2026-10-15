@@ -5,7 +5,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.SharedPreferences
 import android.media.AudioManager
 import android.os.Build
 import android.os.Handler
@@ -33,9 +32,6 @@ class AppBlockerService : AccessibilityService() {
   private var transient: Set<String> = emptySet()
   private var launchers: Set<String> = emptySet()
 
-  private val prefsListener =
-    SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> reloadConfig() }
-
   private val screenReceiver =
     object : BroadcastReceiver() {
       override fun onReceive(context: Context, intent: Intent) {
@@ -50,7 +46,6 @@ class AppBlockerService : AccessibilityService() {
     super.onServiceConnected()
     instance = this
     reloadConfig()
-    BlockerPrefs.prefs(this).registerOnSharedPreferenceChangeListener(prefsListener)
     val filter =
       IntentFilter().apply {
         addAction(Intent.ACTION_SCREEN_OFF)
@@ -86,6 +81,9 @@ class AppBlockerService : AccessibilityService() {
   }
 
   private fun onForeground(pkg: String) {
+    // Settings are edited from the app's own process; re-reading them here (a few
+    // in-memory lookups) is cheaper than keeping a listener in sync.
+    config = BlockerPrefs.load(this)
     val now = SystemClock.elapsedRealtime()
     BlockerState.switchForeground(pkg, now, config.graceMinutes)
     if (!config.enabled) return
@@ -149,7 +147,6 @@ class AppBlockerService : AccessibilityService() {
     try {
       unregisterReceiver(screenReceiver)
     } catch (_: Exception) {}
-    BlockerPrefs.prefs(this).unregisterOnSharedPreferenceChangeListener(prefsListener)
     super.onDestroy()
   }
 
@@ -222,5 +219,7 @@ object BlockerState {
   fun onScreenOff() {
     allowances.clear()
     foreground = null
+    // The next unlock decides afresh whether a challenge is due.
+    unlockPending = false
   }
 }
