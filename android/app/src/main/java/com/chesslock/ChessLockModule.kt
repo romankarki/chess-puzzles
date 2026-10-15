@@ -137,6 +137,10 @@ class ChessLockModule(reactContext: ReactApplicationContext) : NativeChessLockSp
     )
   }
 
+  override fun setWeeklyReminder(enabled: Boolean) {
+    Reminders.setEnabled(reactApplicationContext, enabled)
+  }
+
   override fun getChallengeInfo(promise: Promise) {
     val map = Arguments.createMap()
     map.putString("reason", BlockerState.reason.id)

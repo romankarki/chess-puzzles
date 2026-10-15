@@ -2,6 +2,8 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- Needed (Android 11+) to list apps that can be blocked and to find the
          default phone / messaging / home apps that are never blocked. -->
@@ -58,6 +60,15 @@
         android:excludeFromRecents="true"
         android:screenOrientation="portrait"
         android:exported="false" />
+
+      <!-- Weekly reminder alarm; BOOT_COMPLETED is a protected broadcast only the system sends. -->
+      <receiver
+        android:name=".ReminderReceiver"
+        android:exported="true">
+        <intent-filter>
+            <action android:name="android.intent.action.BOOT_COMPLETED" />
+        </intent-filter>
+      </receiver>
 
       <service
         android:name=".AppBlockerService"

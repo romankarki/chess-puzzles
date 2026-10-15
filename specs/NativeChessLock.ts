@@ -39,6 +39,8 @@ export interface Spec extends TurboModule {
   isIgnoringBatteryOptimizations(): Promise<boolean>;
   requestIgnoreBatteryOptimizations(): void;
   openAppDetails(): void;
+  /** Monday 9:00 notification reminding you to pick the week's theme and opening. */
+  setWeeklyReminder(enabled: boolean): void;
   getChallengeInfo(): Promise<ChallengeInfo>;
   /** Called by the challenge screen once the puzzle/opening is solved. */
   completeChallenge(): void;
