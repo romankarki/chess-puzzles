@@ -9,6 +9,7 @@ import { dueMissed, reviewLines, reviewThemes } from '../engine/review';
 import { ChessLock } from '../native/ChessLock';
 import { setBlockerConfig, useBlocker } from '../native/useBlocker';
 import { Button, Card, Divider, Row, SectionTitle, Select, SelectOption } from '../components/ui';
+import { useGate } from '../components/PuzzleGate';
 import { colors, radius } from '../theme';
 
 export type PracticeRequest =
@@ -42,6 +43,7 @@ interface Props {
 export default function HomeScreen({ onPractice, onOpenApps }: Props) {
   const { settings, progress } = useStore();
   const { config, accessibility, battery } = useBlocker();
+  const { gate, element: gateModal } = useGate();
   const focus = weekFocus(settings);
   const today = progress.daily[dateKey()] ?? { puzzles: 0, openings: 0, challenges: 0 };
   const reps = lineStat(focus.course.id, focus.dayIndex).todayReps;
@@ -87,7 +89,11 @@ export default function HomeScreen({ onPractice, onOpenApps }: Props) {
           <Switch
             value={!!active}
             disabled={!ready}
-            onValueChange={v => setBlockerConfig({ enabled: v })}
+            onValueChange={v =>
+              v
+                ? setBlockerConfig({ enabled: true })
+                : gate('Solve to turn protection off', () => setBlockerConfig({ enabled: false }))
+            }
             trackColor={{ true: '#F3B0B7', false: colors.border }}
             thumbColor={active ? colors.accent : '#FFFFFF'}
           />
@@ -189,6 +195,7 @@ export default function HomeScreen({ onPractice, onOpenApps }: Props) {
         <Stat value={today.openings} label="openings" />
         <Stat value={progress.streak.count} label="day streak" />
       </Row>
+      {gateModal}
     </ScrollView>
   );
 }

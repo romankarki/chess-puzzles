@@ -5,6 +5,7 @@ import { ChessLock } from '../native/ChessLock';
 import { setBlockerConfig, useBlocker } from '../native/useBlocker';
 import { setMondayReminder } from '../native/reminder';
 import { Button, Card, Divider, Row, SectionTitle, Segmented, ToggleRow } from '../components/ui';
+import { useGate } from '../components/PuzzleGate';
 import { colors } from '../theme';
 
 export const LEVELS = [
@@ -18,6 +19,7 @@ export const LEVELS = [
 export default function SettingsScreen() {
   const { settings, progress } = useStore();
   const { config, accessibility, battery } = useBlocker();
+  const { gate, element: gateModal } = useGate();
 
   const nearestLevel = LEVELS.reduce((best, l) =>
     Math.abs(l.value - progress.rating) < Math.abs(best.value - progress.rating) ? l : best,
@@ -34,7 +36,11 @@ export default function SettingsScreen() {
           detail={accessibility ? undefined : 'Turn on ChessLock in Accessibility settings first.'}
           value={config.enabled}
           disabled={!accessibility}
-          onChange={v => setBlockerConfig({ enabled: v })}
+          onChange={v =>
+            v
+              ? setBlockerConfig({ enabled: true })
+              : gate('Solve to turn protection off', () => setBlockerConfig({ enabled: false }))
+          }
         />
         <Divider />
         <ToggleRow
@@ -143,6 +149,7 @@ export default function SettingsScreen() {
           database.lichess.org
         </Text>
       </Text>
+      {gateModal}
     </ScrollView>
   );
 }

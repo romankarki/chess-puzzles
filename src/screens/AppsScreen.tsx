@@ -12,6 +12,7 @@ import {
 import { ChessLock, InstalledApp } from '../native/ChessLock';
 import { setBlockerConfig, useBlocker } from '../native/useBlocker';
 import { Button, Row } from '../components/ui';
+import { useGate } from '../components/PuzzleGate';
 import { colors, radius } from '../theme';
 
 /** Common distracting apps, pre-selected by "Block social & video". */
@@ -49,6 +50,7 @@ let appsCache: InstalledApp[] | null = null;
 
 export default function AppsScreen() {
   const { config, protectedApps } = useBlocker();
+  const { gate, element: gateModal } = useGate();
   const [apps, setApps] = useState<InstalledApp[] | null>(appsCache);
   const [query, setQuery] = useState('');
 
@@ -88,14 +90,15 @@ export default function AppsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apps, query, protectedSet]);
 
-  const toggle = (pkg: string, on: boolean) => {
+  const toggle = (pkg: string, on: boolean, label: string) => {
     const next = new Set(blocked);
     if (on) {
       next.add(pkg);
-    } else {
-      next.delete(pkg);
+      setBlockerConfig({ blockedPackages: [...next] });
+      return;
     }
-    setBlockerConfig({ blockedPackages: [...next] });
+    next.delete(pkg);
+    gate(`Solve to unblock ${label}`, () => setBlockerConfig({ blockedPackages: [...next] }));
   };
 
   const blockDistracting = () => {
@@ -136,7 +139,7 @@ export default function AppsScreen() {
             title="Unblock all"
             small
             kind="ghost"
-            onPress={() => setBlockerConfig({ blockedPackages: [] })}
+            onPress={() => gate('Solve to unblock every app', () => setBlockerConfig({ blockedPackages: [] }))}
             style={{ marginTop: 8 }}
           />
         )}
@@ -165,7 +168,7 @@ export default function AppsScreen() {
                 <Switch
                   value={!isProtected && blocked.has(item.packageName)}
                   disabled={isProtected}
-                  onValueChange={v => toggle(item.packageName, v)}
+                  onValueChange={v => toggle(item.packageName, v, item.label)}
                   trackColor={{ true: '#F3B0B7', false: colors.border }}
                   thumbColor={blocked.has(item.packageName) ? colors.accent : '#FFFFFF'}
                 />
@@ -174,6 +177,7 @@ export default function AppsScreen() {
           }}
         />
       )}
+      {gateModal}
     </View>
   );
 }
