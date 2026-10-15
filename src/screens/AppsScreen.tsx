@@ -118,8 +118,7 @@ export default function AppsScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>Blocked apps</Text>
         <Text style={styles.sub}>
-          {blocked.size} blocked · opening any of them requires a chess challenge. Phone, Messages,
-          Settings and your home screen are always allowed.
+          {blocked.size} blocked · Phone, Messages and your home screen are always allowed.
         </Text>
         <TextInput
           value={query}
@@ -167,8 +166,8 @@ export default function AppsScreen() {
                   value={!isProtected && blocked.has(item.packageName)}
                   disabled={isProtected}
                   onValueChange={v => toggle(item.packageName, v)}
-                  trackColor={{ true: colors.accentDim, false: colors.border }}
-                  thumbColor={blocked.has(item.packageName) ? colors.accent : '#ccc'}
+                  trackColor={{ true: '#F3B0B7', false: colors.border }}
+                  thumbColor={blocked.has(item.packageName) ? colors.accent : '#FFFFFF'}
                 />
               </View>
             );
@@ -189,7 +188,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.text,
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: '800',
   },
   sub: {

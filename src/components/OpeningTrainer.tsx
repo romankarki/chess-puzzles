@@ -143,21 +143,21 @@ export default function OpeningTrainer({
   let message: string;
   let messageColor = colors.text;
   if (status === 'done') {
-    message = mistakes === 0 ? 'Perfect! Line complete.' : `Line complete — ${mistakes} mistake${mistakes > 1 ? 's' : ''}.`;
-    messageColor = colors.accent;
+    message = mistakes === 0 ? 'Perfect!' : `Done — ${mistakes} mistake${mistakes > 1 ? 's' : ''}.`;
+    messageColor = colors.success;
   } else if (status === 'wrong') {
     message = 'Not the book move — try again.';
     messageColor = colors.danger;
   } else if (status === 'opponent') {
-    message = 'Opponent is moving…';
+    message = '…';
     messageColor = colors.textDim;
   } else if (showArrow && guided && missesHere === 0) {
-    message = `Play ${expected!.san} (follow the arrow).`;
+    message = `Play ${expected!.san}.`;
   } else if (showArrow) {
     message = `The book move is ${expected!.san}.`;
     messageColor = colors.info;
   } else {
-    message = 'Your move — play the book move from memory.';
+    message = 'Your move, from memory.';
   }
 
   const userTotal = line.moves.filter((_, i) => isUserTurn(i)).length;
@@ -174,7 +174,7 @@ export default function OpeningTrainer({
             Day {dayIndex + 1}: {line.name}
           </Text>
         </View>
-        <Pill text={guided ? 'LEARN' : 'RECALL'} color={guided ? colors.gold : colors.accent} />
+        <Pill text={guided ? 'LEARN' : 'RECALL'} color={guided ? colors.info : colors.accent} />
       </Row>
       <Board
         pieces={pieces}
@@ -207,9 +207,7 @@ export default function OpeningTrainer({
         {reached ? `${reached.eco} · ${reached.name}` : ' '}
       </Text>
       <Text style={[styles.message, { color: messageColor }]}>{message}</Text>
-      <Text style={styles.note}>
-        {status === 'done' ? line.note : `${userDone}/${userTotal} moves · ${line.note}`}
-      </Text>
+      <Text style={styles.note}>{status === 'done' ? line.note : `${userDone}/${userTotal} moves`}</Text>
       {status === 'done' && (
         <Button
           title={continueLabel}
@@ -251,11 +249,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: radius.sm,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceAlt,
     overflow: 'hidden',
   },
   moveUser: {
-    color: colors.text,
+    color: colors.accent,
     backgroundColor: colors.accentDim,
   },
   moveNext: {
@@ -263,7 +261,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   eco: {
-    color: colors.gold,
+    color: colors.textDim,
     fontSize: 12,
     marginTop: 8,
     textAlign: 'center',

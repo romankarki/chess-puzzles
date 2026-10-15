@@ -1,18 +1,38 @@
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
-import { useStore } from '../storage/store';
-import { dateKey, openingFocus, themeFocus } from '../engine/schedule';
+import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { updateSettings, useStore } from '../storage/store';
+import { ALL_COURSES, dateKey, dayNumber, needsNewPick, weekFocus, weekNumber } from '../engine/schedule';
+import { THEMES } from '../data/themes';
 import { lineStat } from '../engine/openings';
+import { themeSkill } from '../engine/puzzles';
+import { dueMissed, reviewLines, reviewThemes } from '../engine/review';
 import { ChessLock } from '../native/ChessLock';
 import { setBlockerConfig, useBlocker } from '../native/useBlocker';
-import { Button, Card, Pill, Row, SectionTitle } from '../components/ui';
+import { Button, Card, Divider, Row, SectionTitle, Select, SelectOption } from '../components/ui';
 import { colors, radius } from '../theme';
 
 export type PracticeRequest =
   | { kind: 'puzzles' }
   | { kind: 'opening' }
-  | { kind: 'theme'; themeId: string }
-  | { kind: 'line'; courseId: string; dayIndex: number };
+  | { kind: 'line'; courseId: string; dayIndex: number }
+  | { kind: 'review'; what: 'puzzles' | 'opening' };
+
+const THEME_OPTIONS: SelectOption<string>[] = THEMES.map(t => ({
+  value: t.id,
+  label: t.title,
+  detail: t.lesson,
+}));
+
+const COURSE_OPTIONS: SelectOption<string>[] = (['w', 'b'] as const).flatMap(color =>
+  ALL_COURSES.filter(c => c.color === color)
+    .sort((a, b) => a.level - b.level)
+    .map(c => ({
+      value: c.id,
+      label: c.name,
+      detail: `Level ${c.level}/3`,
+      group: color === 'w' ? 'As White' : 'As Black',
+    })),
+);
 
 interface Props {
   onPractice: (req: PracticeRequest) => void;
@@ -22,58 +42,64 @@ interface Props {
 export default function HomeScreen({ onPractice, onOpenApps }: Props) {
   const { settings, progress } = useStore();
   const { config, accessibility, battery } = useBlocker();
-  const puzzle = themeFocus(settings);
-  const opening = openingFocus(settings);
+  const focus = weekFocus(settings);
   const today = progress.daily[dateKey()] ?? { puzzles: 0, openings: 0, challenges: 0 };
-  const reps = lineStat(opening.course.id, opening.dayIndex).todayReps;
+  const reps = lineStat(focus.course.id, focus.dayIndex).todayReps;
+  const stale = needsNewPick(settings);
 
   const ready = accessibility && config.blockedPackages.length > 0;
   const active = ready && config.enabled;
 
+  const pick = (patch: { weekTheme?: string; weekCourse?: string }) =>
+    updateSettings({ ...patch, pickedWeek: weekNumber(dayNumber()) });
+
+  const lineOptions: SelectOption<number>[] = focus.course.days.map((d, i) => ({
+    value: i,
+    label: d.name,
+    detail: `Day ${i + 1}`,
+  }));
+
   return (
     <ScrollView contentContainerStyle={styles.content}>
-      <Row style={{ justifyContent: 'space-between' }}>
+      <Row style={styles.between}>
         <View>
           <Text style={styles.brand}>♞ ChessLock</Text>
-          <Text style={styles.hello}>Today's training</Text>
+          <Text style={styles.title}>Today</Text>
         </View>
         <View style={styles.ratingBox}>
           <Text style={styles.rating}>{progress.rating}</Text>
-          <Text style={styles.ratingLabel}>puzzle rating</Text>
+          <Text style={styles.ratingLabel}>rating</Text>
         </View>
       </Row>
 
       <Card style={[styles.protect, active ? styles.protectOn : null]}>
         <Row>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.protectTitle}>{active ? 'Protection is on' : 'Protection is off'}</Text>
+          <View style={styles.flex}>
+            <Text style={styles.protectTitle}>{active ? 'Protection on' : 'Protection off'}</Text>
             <Text style={styles.protectSub}>
               {active
-                ? `${config.blockedPackages.length} apps need a chess challenge${
-                    config.unlockChallenge ? ' · unlock challenge on' : ''
-                  }`
+                ? `${config.blockedPackages.length} apps need a chess challenge`
                 : ready
-                ? 'Turn on to require chess before blocked apps.'
-                : 'Finish the setup below to start.'}
+                ? 'Blocked apps open without a challenge.'
+                : 'Finish the setup below.'}
             </Text>
           </View>
           <Switch
             value={!!active}
             disabled={!ready}
             onValueChange={v => setBlockerConfig({ enabled: v })}
-            trackColor={{ true: colors.accentDim, false: colors.border }}
-            thumbColor={active ? colors.accent : '#ccc'}
+            trackColor={{ true: '#F3B0B7', false: colors.border }}
+            thumbColor={active ? colors.accent : '#FFFFFF'}
           />
         </Row>
       </Card>
 
       {!ready || !battery ? (
-        <Card style={{ marginTop: 12 }}>
-          <Text style={styles.cardTitle}>Setup</Text>
+        <Card style={styles.gap}>
           <SetupStep
             done={!!accessibility}
             title="Allow ChessLock to detect apps"
-            detail="Settings › Accessibility › ChessLock › On. If it is greyed out, open App info › ⋮ › Allow restricted settings first."
+            detail="Settings › Accessibility › ChessLock. Greyed out? App info › ⋮ › Allow restricted settings."
             action={accessibility ? undefined : 'Open'}
             onPress={() => ChessLock.openAccessibilitySettings()}
             secondary={accessibility ? undefined : 'App info'}
@@ -82,90 +108,130 @@ export default function HomeScreen({ onPractice, onOpenApps }: Props) {
           <SetupStep
             done={config.blockedPackages.length > 0}
             title="Choose apps to block"
-            detail="Social media, YouTube, games… Phone and Messages are never blocked."
             action="Choose"
             onPress={onOpenApps}
           />
           <SetupStep
             done={!!battery}
             title="Keep ChessLock running"
-            detail="Exclude ChessLock from battery optimisation so the blocker is not killed."
+            detail="Unrestricted battery use, so the blocker is not stopped."
             action={battery ? undefined : 'Allow'}
             onPress={() => ChessLock.requestIgnoreBatteryOptimizations()}
           />
         </Card>
       ) : null}
 
-      <SectionTitle>Puzzles · 3-day focus</SectionTitle>
+      <SectionTitle>This week</SectionTitle>
       <Card>
-        <Row style={{ justifyContent: 'space-between' }}>
-          <Text style={styles.cardTitle}>{puzzle.theme.title}</Text>
-          <Pill text={`DAY ${puzzle.dayInBlock} OF 3`} color={colors.gold} />
-        </Row>
-        <Text style={styles.body}>{puzzle.theme.lesson}</Text>
-        <View style={styles.dots}>
-          {[1, 2, 3].map(d => (
-            <View
-              key={d}
-              style={[
-                styles.dayDot,
-                d < puzzle.dayInBlock && { backgroundColor: colors.accentDim },
-                d === puzzle.dayInBlock && { backgroundColor: colors.accent },
-              ]}
-            />
-          ))}
-        </View>
-        <Text style={styles.next}>Next up: {puzzle.next.title}</Text>
-        <Button title="Practice puzzles" onPress={() => onPractice({ kind: 'puzzles' })} style={{ marginTop: 14 }} />
-      </Card>
-
-      <SectionTitle>Opening of the week</SectionTitle>
-      <Card>
-        <Row style={{ justifyContent: 'space-between' }}>
-          <Text style={[styles.cardTitle, { flex: 1 }]}>{opening.course.name}</Text>
-          <Pill
-            text={opening.course.color === 'w' ? 'AS WHITE' : 'AS BLACK'}
-            color={opening.course.color === 'w' ? '#EEE' : colors.textDim}
-          />
-        </Row>
-        <Text style={styles.variation}>
-          Day {opening.dayIndex + 1} of 7 · {opening.line.name}
-        </Text>
-        <Text style={styles.body}>{opening.line.note}</Text>
-        <View style={styles.week}>
-          {opening.course.days.map((d, i) => (
-            <View
-              key={i}
-              style={[
-                styles.weekDay,
-                i < opening.dayIndex && { backgroundColor: colors.accentDim },
-                i === opening.dayIndex && { backgroundColor: colors.accent },
-              ]}>
-              <Text style={[styles.weekText, i === opening.dayIndex && { color: '#0E1A0A' }]}>
-                {'MTWTFSS'[i]}
-              </Text>
-            </View>
-          ))}
-        </View>
-        <Text style={styles.next}>
-          {reps === 0 ? 'Not practised yet today' : `Practised ${reps}× today`} · next week:{' '}
-          {opening.next.name}
-        </Text>
-        <Button
-          title={reps === 0 ? "Learn today's line" : "Drill today's line"}
-          onPress={() => onPractice({ kind: 'opening' })}
-          style={{ marginTop: 14 }}
+        {stale && <Text style={styles.nudge}>New week — pick a fresh theme and opening.</Text>}
+        <Select
+          label="Puzzle theme"
+          value={settings.weekTheme}
+          options={THEME_OPTIONS}
+          onChange={weekTheme => pick({ weekTheme })}
+        />
+        <Select
+          label="Opening"
+          value={settings.weekCourse}
+          options={COURSE_OPTIONS}
+          onChange={weekCourse => pick({ weekCourse })}
+          style={styles.gapSmall}
         />
       </Card>
 
-      <SectionTitle>Today</SectionTitle>
-      <Row style={{ gap: 10 }}>
+      {focus.review ? (
+        <RevisionCard
+          retries={dueMissed(progress).length}
+          themes={reviewThemes(progress).length}
+          lines={reviewLines(progress).length}
+          onPractice={onPractice}
+        />
+      ) : (
+        <>
+          <SectionTitle>Today</SectionTitle>
+          <Card>
+            <Row style={styles.between}>
+              <View style={styles.flex}>
+                <Text style={styles.itemTitle}>{focus.theme.title}</Text>
+                <Text style={styles.itemSub}>Puzzles · rating {themeSkill(progress, focus.theme.id)}</Text>
+              </View>
+              <Button title="Solve" small onPress={() => onPractice({ kind: 'puzzles' })} />
+            </Row>
+            <Divider />
+            <Row style={styles.between}>
+              <View style={styles.flex}>
+                <Text style={styles.itemTitle} numberOfLines={1}>
+                  {focus.line.name}
+                </Text>
+                <Text style={styles.itemSub} numberOfLines={1}>
+                  {focus.course.name} · day {focus.dayIndex + 1}
+                  {reps > 0 ? ` · ${reps}× today` : ''}
+                </Text>
+              </View>
+              <Button title={reps === 0 ? 'Learn' : 'Drill'} small onPress={() => onPractice({ kind: 'opening' })} />
+            </Row>
+            <Select
+              label="Other lines"
+              placeholder="Practise another line…"
+              value={null}
+              options={lineOptions}
+              onChange={dayIndex => onPractice({ kind: 'line', courseId: focus.course.id, dayIndex })}
+              style={styles.gap}
+            />
+          </Card>
+        </>
+      )}
+
+      <SectionTitle>Stats</SectionTitle>
+      <Row style={styles.gapRow}>
         <Stat value={today.challenges} label="challenges" />
         <Stat value={today.puzzles} label="puzzles" />
         <Stat value={today.openings} label="openings" />
         <Stat value={progress.streak.count} label="day streak" />
       </Row>
     </ScrollView>
+  );
+}
+
+function RevisionCard({
+  retries,
+  themes,
+  lines,
+  onPractice,
+}: {
+  retries: number;
+  themes: number;
+  lines: number;
+  onPractice: (req: PracticeRequest) => void;
+}) {
+  const parts = [
+    retries ? `${retries} missed puzzle${retries > 1 ? 's' : ''}` : null,
+    themes ? `${themes} theme${themes > 1 ? 's' : ''}` : null,
+    lines ? `${lines} line${lines > 1 ? 's' : ''}` : null,
+  ].filter(Boolean);
+  return (
+    <>
+      <SectionTitle>Sunday revision</SectionTitle>
+      <Card style={styles.reviewCard}>
+        <Text style={styles.itemSub}>
+          {parts.length ? `Up for revision: ${parts.join(' · ')}` : 'Nothing to revise yet — train a few days first.'}
+        </Text>
+        <Row style={[styles.gapRow, styles.gap]}>
+          <Button
+            title="Puzzles"
+            disabled={themes === 0 && retries === 0}
+            onPress={() => onPractice({ kind: 'review', what: 'puzzles' })}
+            style={styles.flex}
+          />
+          <Button
+            title="Openings"
+            disabled={lines === 0}
+            onPress={() => onPractice({ kind: 'review', what: 'opening' })}
+            style={styles.flex}
+          />
+        </Row>
+      </Card>
+    </>
   );
 }
 
@@ -180,7 +246,7 @@ function SetupStep({
 }: {
   done: boolean;
   title: string;
-  detail: string;
+  detail?: string;
   action?: string;
   onPress: () => void;
   secondary?: string;
@@ -191,15 +257,13 @@ function SetupStep({
       <View style={[styles.check, done && styles.checkDone]}>
         <Text style={styles.checkText}>{done ? '✓' : ''}</Text>
       </View>
-      <View style={{ flex: 1 }}>
+      <View style={styles.flex}>
         <Text style={[styles.stepTitle, done && { color: colors.textDim }]}>{title}</Text>
-        {!done && <Text style={styles.stepDetail}>{detail}</Text>}
+        {!done && detail ? <Text style={styles.stepDetail}>{detail}</Text> : null}
         {!done && (action || secondary) && (
-          <Row style={{ gap: 8, marginTop: 8 }}>
+          <Row style={[styles.gapRow, styles.gapSmall]}>
             {action && <Button title={action} small onPress={onPress} />}
-            {secondary && onSecondary && (
-              <Button title={secondary} small kind="ghost" onPress={onSecondary} />
-            )}
+            {secondary && onSecondary && <Button title={secondary} small kind="ghost" onPress={onSecondary} />}
           </Row>
         )}
       </View>
@@ -209,10 +273,10 @@ function SetupStep({
 
 function Stat({ value, label }: { value: number; label: string }) {
   return (
-    <Pressable style={styles.stat}>
+    <View style={styles.stat}>
       <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
-    </Pressable>
+    </View>
   );
 }
 
@@ -221,24 +285,39 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 32,
   },
+  flex: {
+    flex: 1,
+  },
+  between: {
+    justifyContent: 'space-between',
+  },
+  gap: {
+    marginTop: 12,
+  },
+  gapSmall: {
+    marginTop: 8,
+  },
+  gapRow: {
+    gap: 8,
+  },
   brand: {
     color: colors.accent,
     fontWeight: '800',
     fontSize: 13,
     letterSpacing: 1,
   },
-  hello: {
+  title: {
     color: colors.text,
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: '800',
-    marginTop: 4,
+    marginTop: 2,
   },
   ratingBox: {
     alignItems: 'flex-end',
   },
   rating: {
-    color: colors.gold,
-    fontSize: 26,
+    color: colors.accent,
+    fontSize: 28,
     fontWeight: '800',
   },
   ratingLabel: {
@@ -250,7 +329,7 @@ const styles = StyleSheet.create({
   },
   protectOn: {
     borderColor: colors.accent,
-    backgroundColor: '#17241A',
+    backgroundColor: colors.accentDim,
   },
   protectTitle: {
     color: colors.text,
@@ -262,56 +341,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 3,
   },
-  cardTitle: {
+  nudge: {
+    color: colors.accent,
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  itemTitle: {
     color: colors.text,
-    fontSize: 19,
+    fontSize: 17,
     fontWeight: '800',
   },
-  variation: {
-    color: colors.gold,
-    fontSize: 14,
-    fontWeight: '700',
-    marginTop: 6,
-  },
-  body: {
+  itemSub: {
     color: colors.textDim,
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 6,
+    fontSize: 13,
+    marginTop: 3,
   },
-  next: {
-    color: colors.textFaint,
-    fontSize: 12,
-    marginTop: 10,
-  },
-  dots: {
-    flexDirection: 'row',
-    gap: 6,
-    marginTop: 12,
-  },
-  dayDot: {
-    flex: 1,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.border,
-  },
-  week: {
-    flexDirection: 'row',
-    gap: 6,
-    marginTop: 12,
-  },
-  weekDay: {
-    flex: 1,
-    height: 26,
-    borderRadius: radius.sm,
-    backgroundColor: colors.surfaceAlt,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  weekText: {
-    color: colors.textDim,
-    fontSize: 12,
-    fontWeight: '700',
+  reviewCard: {
+    borderColor: colors.accent,
   },
   step: {
     flexDirection: 'row',
@@ -332,7 +379,7 @@ const styles = StyleSheet.create({
     borderColor: colors.accent,
   },
   checkText: {
-    color: '#0E1A0A',
+    color: colors.onAccent,
     fontWeight: '900',
     fontSize: 13,
   },

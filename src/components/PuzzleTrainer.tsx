@@ -132,16 +132,16 @@ export default function PuzzleTrainer({ puzzle, size, onComplete, continueLabel 
     message = 'Get ready…';
     messageColor = colors.textDim;
   } else if (status === 'solved') {
-    message = clean ? 'Solved! Excellent.' : 'Solved — keep practising this pattern.';
-    messageColor = colors.accent;
+    message = clean ? 'Solved!' : 'Solved — with help.';
+    messageColor = colors.success;
   } else if (status === 'wrong') {
-    message = 'Not the best move — try again.';
+    message = 'Not that one — try again.';
     messageColor = colors.danger;
   } else if (status === 'opponent') {
-    message = 'Good move! Keep going…';
-    messageColor = colors.accent;
+    message = 'Good move…';
+    messageColor = colors.success;
   } else {
-    message = `Your move — find the best move for ${userColor === 'w' ? 'White' : 'Black'}.`;
+    message = 'Your move.';
   }
 
   const userMovesTotal = Math.floor(puzzle.moves.length / 2);
@@ -153,13 +153,15 @@ export default function PuzzleTrainer({ puzzle, size, onComplete, continueLabel 
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>{theme?.title ?? 'Puzzle'}</Text>
           <Text style={styles.sub}>
+            {puzzle.source === 'retry'
+              ? 'Retry · you missed this one before · '
+              : puzzle.source === 'review'
+              ? 'Revision · '
+              : ''}
             {userMovesTotal === 1 ? 'One move' : `${userMovesTotal} moves`} · rated {puzzle.rating}
           </Text>
         </View>
-        <Pill
-          text={userColor === 'w' ? 'WHITE TO PLAY' : 'BLACK TO PLAY'}
-          color={userColor === 'w' ? '#F2F2F2' : colors.textDim}
-        />
+        <Pill text={userColor === 'w' ? 'WHITE' : 'BLACK'} color={colors.text} />
       </Row>
       <Board
         pieces={pieces}
@@ -179,13 +181,13 @@ export default function PuzzleTrainer({ puzzle, size, onComplete, continueLabel 
         {Array.from({ length: userMovesTotal }).map((_, i) => (
           <View
             key={i}
-            style={[styles.dot, i < userMovesDone && { backgroundColor: colors.accent }]}
+            style={[styles.dot, i < userMovesDone && { backgroundColor: colors.success }]}
           />
         ))}
       </View>
       <Text style={[styles.message, { color: messageColor }]}>{message}</Text>
-      {theme && status !== 'solved' && (
-        <Text style={styles.tip}>{hintLevel > 0 || mistakes > 0 ? theme.tip : theme.lesson}</Text>
+      {theme && status !== 'solved' && (hintLevel > 0 || mistakes > 0) && (
+        <Text style={styles.tip}>{theme.tip}</Text>
       )}
       <Row style={styles.actions}>
         {status === 'solved' ? (

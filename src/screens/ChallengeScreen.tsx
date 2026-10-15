@@ -15,6 +15,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { ChallengeInfo, ChessLock, onChallengeChanged } from '../native/ChessLock';
 import { getState, loadState, updateProgress, useStore } from '../storage/store';
 import { bumpDay } from '../engine/puzzles';
+import { isReviewDay } from '../engine/schedule';
 import TrainingSession, { SessionKind, sessionKindFor } from '../components/TrainingSession';
 import { colors, radius } from '../theme';
 
@@ -22,14 +23,14 @@ import { colors, radius } from '../theme';
 export default function ChallengeRoot() {
   return (
     <SafeAreaProvider>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" />
       <ChallengeScreen />
     </SafeAreaProvider>
   );
 }
 
 function ChallengeScreen() {
-  const { loaded } = useStore();
+  const { loaded, settings } = useStore();
   const [info, setInfo] = useState<ChallengeInfo>({ reason: 'none', packageName: '', appLabel: '' });
   const [kind, setKind] = useState<SessionKind | null>(null);
   const [progress, setProgress] = useState({ done: 0, total: 1 });
@@ -77,12 +78,14 @@ function ChallengeScreen() {
       : info.reason === 'unlock'
       ? 'Unlock challenge'
       : 'Chess challenge';
+  const revision = loaded && isReviewDay(settings) ? 'Revision · ' : '';
   const sub =
-    kind === 'opening'
-      ? "Play today's opening line to continue."
+    revision +
+    (kind === 'opening'
+      ? 'Play the line to continue.'
       : progress.total > 1
       ? `Puzzle ${Math.min(progress.done + 1, progress.total)} of ${progress.total}`
-      : 'Solve the puzzle to continue.';
+      : 'Solve to continue.');
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
@@ -124,7 +127,7 @@ function FooterButton({ label, onPress }: { label: string; onPress: () => void }
   return (
     <Pressable
       onPress={onPress}
-      android_ripple={{ color: 'rgba(255,255,255,0.1)' }}
+      android_ripple={{ color: 'rgba(0,0,0,0.08)' }}
       style={styles.footerBtn}>
       <Text style={styles.footerText}>{label}</Text>
     </Pressable>
@@ -180,13 +183,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   done: {
-    backgroundColor: 'rgba(15,18,24,0.94)',
+    backgroundColor: 'rgba(247,247,249,0.94)',
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radius.lg,
   },
   doneIcon: {
-    color: colors.accent,
+    color: colors.success,
     fontSize: 72,
     fontWeight: '800',
   },

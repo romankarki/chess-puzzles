@@ -1,8 +1,16 @@
 import React, { useMemo, useState } from 'react';
 import { getState, TrainingMode } from '../storage/store';
-import { ALL_COURSES, openingFocus, themeFocus } from '../engine/schedule';
-import { pickPuzzle, Puzzle, recordPuzzle, targetRating } from '../engine/puzzles';
+import { courseById, dateKey, weekFocus } from '../engine/schedule';
+import {
+  formAdjustment,
+  pickPuzzle,
+  Puzzle,
+  recordPuzzle,
+  targetRating,
+  themeSkill,
+} from '../engine/puzzles';
 import { isGuided, recordOpening } from '../engine/openings';
+import { nextReviewPuzzle, reviewLines } from '../engine/review';
 import PuzzleTrainer from './PuzzleTrainer';
 import OpeningTrainer from './OpeningTrainer';
 
@@ -19,13 +27,14 @@ export function sessionKindFor(mode: TrainingMode, counter: number): SessionKind
   return 'puzzles';
 }
 
-function nextPuzzle(themeId?: string): Puzzle {
+function nextPuzzle(review: boolean): Puzzle {
   const { settings, progress } = getState();
-  if (themeId) {
-    return pickPuzzle(themeId, progress.rating, progress.seen);
+  if (review) {
+    return nextReviewPuzzle(settings, progress, progress.daily[dateKey()]?.puzzles ?? 0);
   }
-  const focus = themeFocus(settings);
-  return pickPuzzle(focus.theme.id, targetRating(progress.rating, focus.dayInBlock), progress.seen);
+  const theme = weekFocus(settings).theme.id;
+  const target = targetRating(themeSkill(progress, theme), formAdjustment(progress.recent));
+  return pickPuzzle(theme, target, progress.seen);
 }
 
 interface Props {
@@ -36,13 +45,13 @@ interface Props {
   onFinished: () => void;
   onProgress?: (done: number, total: number) => void;
   finishLabel?: string;
-  /** Practise this theme instead of the current 3-day focus. */
-  themeId?: string;
-  /** Practise this line instead of today's opening. */
+  /** Practise this line instead of today's. */
   line?: { courseId: string; dayIndex: number };
+  /** Revise older material. Defaults to on for revision days (unless a line is given). */
+  review?: boolean;
 }
 
-/** Runs today's training: N puzzles of the current theme, or one pass of today's opening line. */
+/** Runs today's training: N puzzles of the week's theme, or one pass of today's opening line. */
 export default function TrainingSession({
   kind,
   count,
@@ -50,19 +59,26 @@ export default function TrainingSession({
   onFinished,
   onProgress,
   finishLabel = 'Done',
-  themeId,
   line,
+  review,
 }: Props) {
+  const [reviewing] = useState(() => review ?? (!line && weekFocus(getState().settings).review));
   const [index, setIndex] = useState(0);
   const [puzzle, setPuzzle] = useState<Puzzle | null>(() =>
-    kind === 'puzzles' ? nextPuzzle(themeId) : null,
+    kind === 'puzzles' ? nextPuzzle(reviewing) : null,
   );
   const opening = useMemo(() => {
+    const { settings, progress } = getState();
     if (line) {
-      const course = ALL_COURSES.find(c => c.id === line.courseId) ?? ALL_COURSES[0];
+      const course = courseById(line.courseId);
       return { course, dayIndex: line.dayIndex, guided: isGuided(course.id, line.dayIndex) };
     }
-    const focus = openingFocus(getState().settings);
+    const old = reviewing ? reviewLines(progress)[0] : undefined;
+    if (old) {
+      // Revision is always from memory; hints appear only after mistakes.
+      return { course: courseById(old.courseId), dayIndex: old.dayIndex, guided: false };
+    }
+    const focus = weekFocus(settings);
     return { ...focus, guided: isGuided(focus.course.id, focus.dayIndex) };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -93,7 +109,7 @@ export default function TrainingSession({
       key={puzzle.id}
       puzzle={puzzle}
       size={size}
-      continueLabel={last ? finishLabel : 'Next puzzle'}
+      continueLabel={last ? finishLabel : 'Next'}
       onComplete={r => {
         recordPuzzle(puzzle, r.clean);
         onProgress?.(index + 1, count);
@@ -101,7 +117,7 @@ export default function TrainingSession({
           onFinished();
         } else {
           setIndex(i => i + 1);
-          setPuzzle(nextPuzzle(themeId));
+          setPuzzle(nextPuzzle(reviewing));
         }
       }}
     />

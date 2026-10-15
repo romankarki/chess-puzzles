@@ -1,11 +1,10 @@
 import React from 'react';
-import { Alert, Linking, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, Linking, ScrollView, StyleSheet, Text } from 'react-native';
 import { resetProgress, updateProgress, updateSettings, useStore } from '../storage/store';
-import { openingFocus, themeFocus } from '../engine/schedule';
-import { THEMES } from '../data/themes';
 import { ChessLock } from '../native/ChessLock';
 import { setBlockerConfig, useBlocker } from '../native/useBlocker';
-import { Button, Card, Row, Segmented, SectionTitle } from '../components/ui';
+import { setMondayReminder } from '../native/reminder';
+import { Button, Card, Divider, Row, SectionTitle, Segmented, ToggleRow } from '../components/ui';
 import { colors } from '../theme';
 
 export const LEVELS = [
@@ -19,18 +18,6 @@ export const LEVELS = [
 export default function SettingsScreen() {
   const { settings, progress } = useStore();
   const { config, accessibility, battery } = useBlocker();
-  const puzzle = themeFocus(settings);
-  const opening = openingFocus(settings);
-
-  const toggleTheme = (id: string, on: boolean) => {
-    const disabled = new Set(settings.disabledThemes);
-    if (on) {
-      disabled.delete(id);
-    } else if (THEMES.length - disabled.size > 1) {
-      disabled.add(id);
-    }
-    updateSettings({ disabledThemes: [...disabled] });
-  };
 
   const nearestLevel = LEVELS.reduce((best, l) =>
     Math.abs(l.value - progress.rating) < Math.abs(best.value - progress.rating) ? l : best,
@@ -44,24 +31,20 @@ export default function SettingsScreen() {
       <Card>
         <ToggleRow
           title="ChessLock enabled"
-          detail={
-            accessibility
-              ? 'Blocked apps need a chess challenge.'
-              : 'Turn on ChessLock in Accessibility settings first.'
-          }
+          detail={accessibility ? undefined : 'Turn on ChessLock in Accessibility settings first.'}
           value={config.enabled}
           disabled={!accessibility}
           onChange={v => setBlockerConfig({ enabled: v })}
         />
         <Divider />
         <ToggleRow
-          title="Challenge on every unlock"
-          detail="Solve a puzzle each time you unlock your phone. Phone & Messages stay available."
+          title="Puzzle on every unlock"
+          detail="Until solved, every app except Phone and Messages asks for it."
           value={config.unlockChallenge}
           onChange={v => setBlockerConfig({ unlockChallenge: v })}
         />
         <Divider />
-        <Text style={styles.label}>After solving, re-open the same app freely for</Text>
+        <Text style={styles.label}>Re-open the same app freely for</Text>
         <Segmented<number>
           value={config.graceMinutes}
           onChange={v => setBlockerConfig({ graceMinutes: v })}
@@ -72,15 +55,11 @@ export default function SettingsScreen() {
             { value: 15, label: '15 min' },
           ]}
         />
-        <Text style={styles.hint}>
-          While you stay in an app you are never interrupted. This sets how long you can leave and
-          come back without another challenge.
-        </Text>
       </Card>
 
       <SectionTitle>Training</SectionTitle>
       <Card>
-        <Text style={styles.label}>Challenges use</Text>
+        <Text style={[styles.label, styles.first]}>Challenges</Text>
         <Segmented
           value={settings.mode}
           onChange={mode => updateSettings({ mode })}
@@ -90,14 +69,6 @@ export default function SettingsScreen() {
             { value: 'mixed', label: 'Mixed' },
           ]}
         />
-        <Text style={styles.hint}>
-          {settings.mode === 'puzzles'
-            ? 'Puzzles focus on one tactical theme for 3 days, then move to the next.'
-            : settings.mode === 'openings'
-            ? 'One opening per week; each day you drill one variation until it sticks.'
-            : 'Alternate between puzzles and the opening of the week.'}
-        </Text>
-
         {settings.mode !== 'openings' && (
           <>
             <Text style={styles.label}>Puzzles per challenge</Text>
@@ -112,76 +83,33 @@ export default function SettingsScreen() {
             />
           </>
         )}
-
-        <Text style={styles.label}>Openings to learn</Text>
-        <Segmented
-          value={settings.openingSide}
-          onChange={openingSide => updateSettings({ openingSide })}
-          options={[
-            { value: 'both', label: 'Both' },
-            { value: 'w', label: 'White' },
-            { value: 'b', label: 'Black' },
-          ]}
-        />
-
-        <Text style={styles.label}>Your level (puzzle rating {progress.rating})</Text>
+        <Text style={styles.label}>Level</Text>
         <Segmented<number>
           value={nearestLevel.value}
           onChange={rating => updateProgress(p => ({ ...p, rating }))}
           options={LEVELS}
         />
-        <Text style={styles.hint}>Your rating adjusts automatically after every puzzle.</Text>
-      </Card>
-
-      <SectionTitle>Schedule</SectionTitle>
-      <Card>
-        <Row style={{ justifyContent: 'space-between' }}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.rowTitle}>Puzzle theme: {puzzle.theme.title}</Text>
-            <Text style={styles.hint}>
-              Day {puzzle.dayInBlock} of 3 · next: {puzzle.next.title}
-            </Text>
-          </View>
-          <Button
-            title="Skip"
-            small
-            kind="secondary"
-            onPress={() => updateSettings({ themeOffset: settings.themeOffset + 1 })}
-          />
-        </Row>
+        <Text style={styles.hint}>Rating {progress.rating} · adjusts as you solve.</Text>
         <Divider />
-        <Row style={{ justifyContent: 'space-between' }}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.rowTitle}>Opening: {opening.course.name}</Text>
-            <Text style={styles.hint}>Next week: {opening.next.name}</Text>
-          </View>
-          <Button
-            title="Skip"
-            small
-            kind="secondary"
-            onPress={() => updateSettings({ courseOffset: settings.courseOffset + 1 })}
-          />
-        </Row>
-      </Card>
-
-      <SectionTitle>Puzzle themes in rotation</SectionTitle>
-      <Card>
-        {THEMES.map((t, i) => (
-          <View key={t.id}>
-            {i > 0 && <Divider />}
-            <ToggleRow
-              title={t.title}
-              value={!settings.disabledThemes.includes(t.id)}
-              onChange={v => toggleTheme(t.id, v)}
-            />
-          </View>
-        ))}
+        <ToggleRow
+          title="Sunday revision"
+          detail="Revisit older themes, missed puzzles and learned lines."
+          value={settings.sundayReview}
+          onChange={sundayReview => updateSettings({ sundayReview })}
+        />
+        <Divider />
+        <ToggleRow
+          title="Monday reminder"
+          detail="Notification at 9:00 to pick the week's theme and opening."
+          value={settings.mondayReminder}
+          onChange={on => setMondayReminder(on)}
+        />
       </Card>
 
       <SectionTitle>Permissions</SectionTitle>
       <Card>
         <PermissionRow
-          title="Accessibility service"
+          title="Accessibility"
           ok={!!accessibility}
           action="Open"
           onPress={() => ChessLock.openAccessibilitySettings()}
@@ -194,68 +122,28 @@ export default function SettingsScreen() {
           onPress={() => ChessLock.requestIgnoreBatteryOptimizations()}
         />
         <Divider />
-        <PermissionRow
-          title="App info (restricted settings)"
-          ok
-          action="Open"
-          onPress={() => ChessLock.openAppDetails()}
-        />
+        <PermissionRow title="App info" ok action="Open" onPress={() => ChessLock.openAppDetails()} />
       </Card>
 
-      <SectionTitle>Data</SectionTitle>
-      <Card>
-        <Button
-          title="Reset progress"
-          kind="ghost"
-          onPress={() =>
-            Alert.alert('Reset progress?', 'Your rating, history and streak will be cleared.', [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Reset', style: 'destructive', onPress: () => resetProgress(1000) },
-            ])
-          }
-        />
-      </Card>
+      <Button
+        title="Reset progress"
+        kind="ghost"
+        style={styles.reset}
+        onPress={() =>
+          Alert.alert('Reset progress?', 'Your rating, history and streak will be cleared.', [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Reset', style: 'destructive', onPress: () => resetProgress(1000) },
+          ])
+        }
+      />
 
       <Text style={styles.credits}>
-        Puzzles from the lichess.org puzzle database and opening names from lichess
-        chess-openings (both CC0). Pieces: cburnett (CC BY-SA 3.0).
-      </Text>
-      <Text
-        style={[styles.credits, { color: colors.info }]}
-        onPress={() => Linking.openURL('https://database.lichess.org/#puzzles')}>
-        database.lichess.org
+        Puzzles: lichess.org (CC0) · Pieces: cburnett (CC BY-SA 3.0) ·{' '}
+        <Text style={styles.link} onPress={() => Linking.openURL('https://database.lichess.org/#puzzles')}>
+          database.lichess.org
+        </Text>
       </Text>
     </ScrollView>
-  );
-}
-
-function ToggleRow({
-  title,
-  detail,
-  value,
-  onChange,
-  disabled,
-}: {
-  title: string;
-  detail?: string;
-  value: boolean;
-  onChange: (v: boolean) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <Row style={{ gap: 12 }}>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.rowTitle}>{title}</Text>
-        {detail ? <Text style={styles.hint}>{detail}</Text> : null}
-      </View>
-      <Switch
-        value={value}
-        disabled={disabled}
-        onValueChange={onChange}
-        trackColor={{ true: colors.accentDim, false: colors.border }}
-        thumbColor={value ? colors.accent : '#ccc'}
-      />
-    </Row>
   );
 }
 
@@ -271,16 +159,12 @@ function PermissionRow({
   onPress: () => void;
 }) {
   return (
-    <Row style={{ gap: 12 }}>
-      <Text style={[styles.status, { color: ok ? colors.accent : colors.danger }]}>{ok ? '✓' : '!'}</Text>
-      <Text style={[styles.rowTitle, { flex: 1 }]}>{title}</Text>
+    <Row style={styles.permission}>
+      <Text style={[styles.status, { color: ok ? colors.success : colors.danger }]}>{ok ? '✓' : '!'}</Text>
+      <Text style={styles.rowTitle}>{title}</Text>
       <Button title={action} small kind="secondary" onPress={onPress} />
     </Row>
   );
-}
-
-function Divider() {
-  return <View style={styles.divider} />;
 }
 
 const styles = StyleSheet.create({
@@ -290,7 +174,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.text,
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: '800',
   },
   label: {
@@ -300,7 +184,11 @@ const styles = StyleSheet.create({
     marginTop: 14,
     marginBottom: 8,
   },
+  first: {
+    marginTop: 0,
+  },
   rowTitle: {
+    flex: 1,
     color: colors.text,
     fontSize: 15,
     fontWeight: '600',
@@ -311,22 +199,26 @@ const styles = StyleSheet.create({
     marginTop: 6,
     lineHeight: 17,
   },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.border,
-    marginVertical: 12,
+  permission: {
+    gap: 12,
   },
   status: {
     width: 18,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '900',
     textAlign: 'center',
+  },
+  reset: {
+    marginTop: 22,
   },
   credits: {
     color: colors.textFaint,
     fontSize: 11,
-    textAlign: 'center',
-    marginTop: 24,
     lineHeight: 16,
+    marginTop: 18,
+    textAlign: 'center',
+  },
+  link: {
+    color: colors.info,
   },
 });

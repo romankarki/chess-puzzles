@@ -13,19 +13,18 @@ import {
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { loadState, updateProgress, updateSettings, useStore } from './src/storage/store';
 import HomeScreen, { PracticeRequest } from './src/screens/HomeScreen';
-import LearnScreen from './src/screens/LearnScreen';
 import AppsScreen from './src/screens/AppsScreen';
 import SettingsScreen, { LEVELS } from './src/screens/SettingsScreen';
 import TrainingSession from './src/components/TrainingSession';
 import { Button, Card, Segmented } from './src/components/ui';
+import { setMondayReminder } from './src/native/reminder';
 import { colors } from './src/theme';
-import { dayNumber } from './src/engine/schedule';
+import { dayNumber, weekNumber } from './src/engine/schedule';
 
-type Tab = 'home' | 'learn' | 'apps' | 'settings';
+type Tab = 'home' | 'apps' | 'settings';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'home', label: 'Today', icon: '♞' },
-  { id: 'learn', label: 'Learn', icon: '♜' },
   { id: 'apps', label: 'Apps', icon: '⊘' },
   { id: 'settings', label: 'Settings', icon: '⚙' },
 ];
@@ -33,7 +32,7 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
 export default function App() {
   return (
     <SafeAreaProvider>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" />
       <Main />
     </SafeAreaProvider>
   );
@@ -68,9 +67,8 @@ function Main() {
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
-      <View style={{ flex: 1 }}>
+      <View style={styles.flex}>
         {tab === 'home' && <HomeScreen onPractice={setPractice} onOpenApps={() => setTab('apps')} />}
-        {tab === 'learn' && <LearnScreen onPractice={setPractice} />}
         {tab === 'apps' && <AppsScreen />}
         {tab === 'settings' && <SettingsScreen />}
       </View>
@@ -107,32 +105,34 @@ function PracticeModal({
   if (!request) {
     return null;
   }
-  const isOpening = request.kind === 'opening' || request.kind === 'line';
+  const review = request.kind === 'review';
+  const isOpening =
+    request.kind === 'opening' || request.kind === 'line' || (review && request.what === 'opening');
 
   return (
     <Modal visible animationType="slide" onRequestClose={onClose} statusBarTranslucent={false}>
       <SafeAreaProvider>
         <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>{isOpening ? 'Opening practice' : 'Puzzle practice'}</Text>
+            <Text style={styles.modalTitle}>{review ? 'Revision' : isOpening ? 'Opening' : 'Puzzles'}</Text>
             <Pressable onPress={onClose} hitSlop={12}>
               <Text style={styles.close}>✕</Text>
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={styles.modalBody}>
             {done ? (
-              <Card style={{ width: size, alignItems: 'center' }}>
+              <Card style={[styles.doneCard, { width: size }]}>
                 <Text style={styles.doneIcon}>✓</Text>
                 <Text style={styles.doneText}>Line complete</Text>
                 <Button
-                  title="Again"
+                  title={review ? 'Next line' : 'Again'}
                   onPress={() => {
                     setDone(false);
                     setRound(r => r + 1);
                   }}
-                  style={{ marginTop: 16, alignSelf: 'stretch' }}
+                  style={styles.doneBtn}
                 />
-                <Button title="Close" kind="ghost" onPress={onClose} style={{ marginTop: 8, alignSelf: 'stretch' }} />
+                <Button title="Close" kind="ghost" onPress={onClose} style={styles.doneBtnSmall} />
               </Card>
             ) : (
               <TrainingSession
@@ -140,8 +140,8 @@ function PracticeModal({
                 kind={isOpening ? 'opening' : 'puzzles'}
                 count={isOpening ? 1 : 1000}
                 size={size}
-                themeId={request.kind === 'theme' ? request.themeId : undefined}
                 line={request.kind === 'line' ? request : undefined}
+                review={review}
                 finishLabel="Finish"
                 onFinished={() => (isOpening ? setDone(true) : onClose())}
               />
@@ -158,20 +158,13 @@ function Onboarding() {
   const [mode, setMode] = useState<'puzzles' | 'openings' | 'mixed'>('puzzles');
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
-      <ScrollView contentContainerStyle={{ padding: 20, paddingTop: 40 }}>
+      <ScrollView contentContainerStyle={styles.onboarding}>
         <Text style={styles.logo}>♞</Text>
-        <Text style={styles.welcome}>Welcome to ChessLock</Text>
-        <Text style={styles.welcomeSub}>
-          Turn every phone unlock and every distracting app into a few moves of chess training.
-          Puzzles focus on one tactic for 3 days; openings focus on one opening per week with a new
-          variation each day.
-        </Text>
-        <Text style={styles.q}>How strong are you?</Text>
+        <Text style={styles.welcome}>ChessLock</Text>
+        <Text style={styles.welcomeSub}>A few moves of chess before your distracting apps open.</Text>
+        <Text style={styles.q}>Your level</Text>
         <Segmented<number> value={rating} onChange={setRating} options={LEVELS} />
-        <Text style={styles.qHint}>
-          New: just learned the moves · Club: play regularly · Expert: tournament player
-        </Text>
-        <Text style={styles.q}>What should challenges train?</Text>
+        <Text style={styles.q}>Challenges</Text>
         <Segmented
           value={mode}
           onChange={setMode}
@@ -181,13 +174,13 @@ function Onboarding() {
             { value: 'mixed', label: 'Mixed' },
           ]}
         />
-        <Text style={styles.qHint}>You can change this any time in Settings.</Text>
         <Button
-          title="Start training"
-          style={{ marginTop: 32 }}
+          title="Start"
+          style={styles.start}
           onPress={() => {
             updateProgress(p => ({ ...p, rating }));
-            updateSettings({ mode, onboarded: true, startDay: dayNumber() });
+            updateSettings({ mode, onboarded: true, pickedWeek: weekNumber(dayNumber()) });
+            setMondayReminder(true);
           }}
         />
       </ScrollView>
@@ -199,6 +192,9 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.bg,
+  },
+  flex: {
+    flex: 1,
   },
   tabs: {
     flexDirection: 'row',
@@ -229,7 +225,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingVertical: 12,
   },
   modalTitle: {
     color: colors.text,
@@ -242,26 +238,42 @@ const styles = StyleSheet.create({
   },
   modalBody: {
     alignItems: 'center',
-    paddingBottom: 32,
+    paddingBottom: 24,
+  },
+  doneCard: {
+    alignItems: 'center',
   },
   doneIcon: {
-    color: colors.accent,
+    color: colors.success,
     fontSize: 56,
     fontWeight: '800',
   },
   doneText: {
     color: colors.text,
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 20,
+    fontWeight: '800',
+    marginTop: 4,
+  },
+  doneBtn: {
+    marginTop: 16,
+    alignSelf: 'stretch',
+  },
+  doneBtnSmall: {
+    marginTop: 8,
+    alignSelf: 'stretch',
+  },
+  onboarding: {
+    padding: 20,
+    paddingTop: 48,
   },
   logo: {
-    fontSize: 64,
     color: colors.accent,
+    fontSize: 64,
     textAlign: 'center',
   },
   welcome: {
     color: colors.text,
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: '800',
     textAlign: 'center',
     marginTop: 8,
@@ -269,20 +281,18 @@ const styles = StyleSheet.create({
   welcomeSub: {
     color: colors.textDim,
     fontSize: 15,
-    lineHeight: 22,
     textAlign: 'center',
-    marginTop: 12,
+    marginTop: 8,
+    lineHeight: 22,
   },
   q: {
     color: colors.text,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     marginTop: 28,
-    marginBottom: 10,
+    marginBottom: 8,
   },
-  qHint: {
-    color: colors.textFaint,
-    fontSize: 12,
-    marginTop: 8,
+  start: {
+    marginTop: 32,
   },
 });
