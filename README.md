@@ -10,26 +10,36 @@ time you unlock your phone. Phone and Messages are never blocked.
 
 ## How training works
 
+Each week you pick **one puzzle theme** and **one opening** from the dropdowns on the Today
+screen. They stay until you change them; a Monday 9:00 notification reminds you to.
+
 | | Puzzles | Openings |
 |---|---|---|
-| **Focus** | One tactical theme for **3 days** (forks, pins, mate in 2, …) | One opening per **week** |
-| **Each day** | Puzzles get slightly harder from day 1 to day 3 | A different variation of that opening, **the same line all day** |
+| **This week** | The chosen theme (forks, pins, mate in 2, …) | The chosen opening course |
+| **Mon–Sat** | Puzzles at your level in that theme | One variation of the course per day, **the same line all day** |
+| **Sunday** | Revision: older themes, weakest first, plus retries of puzzles you missed | Revision: lines you've learned, least solid first, from memory |
 | **Per challenge** | 1–3 short puzzles (≤ 3 moves to find) | Play the day's line from memory |
 | **Database** | 18,190 lichess puzzles across 32 themes, rated ~450–2750 | 30 courses × 7 variations = 210 lines, named with 3,800+ lichess ECO names |
 
-- **Rating**: an Elo-style puzzle rating picks puzzles near your level and goes up as you improve.
-  A puzzle counts as solved only without mistakes or hints.
+- **Adaptive difficulty**: an Elo-style rating picks puzzles near your level. Each theme also
+  keeps its own rating, blended in as you play it (weak themes get easier puzzles, strong
+  ones harder), and your last 12 results nudge difficulty by −120…+100 to keep you near
+  ~70% clean solves. A puzzle counts as solved only without mistakes or hints.
+- **Sunday revision** (Settings › Training, on by default): challenges revisit themes you have
+  practised — ranked by miss rate and how long since you saw them, rotating as you go —
+  alternating with retries of puzzles you missed on earlier days (a clean retry clears it;
+  retries don't change your rating). Opening challenges replay learned lines from memory.
 - **Hints** escalate after mistakes (piece highlight → arrow), so a challenge can always be finished.
 - **Openings**: the first run of the day is *guided* (arrows show each move); afterwards you
   play from memory and an arrow appears only after a mistake. Every position shows its ECO
-  name, e.g. *B90 · Sicilian Defense: Najdorf Variation, English Attack*.
-- **Modes**: Puzzles, Openings or Mixed (alternates). Courses can be limited to White or Black.
-- **Curriculum** (each 3 days): Mate in 1 → Hanging pieces → Forks → Pins → Skewers →
-  Discovered attacks → Back-rank mate → Mate in 2 → Double check → Trapped pieces →
-  Attraction → Deflection → Remove the defender → Smothered mate → Promotion → f2/f7 →
-  Sacrifices → In-between moves → Clearance → Interference → X-ray → Quiet moves →
-  Defensive moves → Kingside attack → Mate in 3 → Mating patterns → Zugzwang →
-  Pawn / Rook / Minor-piece / Queen endgames → Opening tactics.
+  name, e.g. *B90 · Sicilian Defense: Najdorf Variation, English Attack*. Any of the course's
+  7 lines can be practised from the "Other lines" dropdown.
+- **Modes**: Puzzles, Openings or Mixed (alternates).
+- **Themes**: Mate in 1, Hanging pieces, Forks, Pins, Skewers, Discovered attacks, Back-rank
+  mate, Mate in 2, Double check, Trapped pieces, Attraction, Deflection, Remove the defender,
+  Smothered mate, Promotion, f2/f7, Sacrifices, In-between moves, Clearance, Interference,
+  X-ray, Quiet moves, Defensive moves, Kingside attack, Mate in 3, Mating patterns, Zugzwang,
+  Pawn / Rook / Minor-piece / Queen endgames, Opening tactics.
 - **Opening courses** — White: Italian, Ruy Lopez, Scotch, Queen's Gambit, London, English,
   Vienna, Catalan, Réti & KIA, Open Sicilian, King's Gambit. Black: Najdorf, Dragon,
   Sveshnikov, Anti-Sicilians, French, Caro-Kann, Scandinavian, Petrov, 1…e5 Open Games,
@@ -41,9 +51,11 @@ time you unlock your phone. Phone and Messages are never blocked.
 - Opening a blocked app shows the challenge on top of it. Solve it and the app opens.
 - While you stay in the app you're never interrupted. Leaving and coming back requires a new
   challenge (configurable grace period: never / 1 / 5 / 15 min).
-- **Unlock challenge** (optional): after unlocking, a challenge appears. Until it is solved,
+- **Puzzle on every unlock** (optional, off by default): after unlocking, a challenge appears. Until it is solved,
   every app except Phone, Messages, Settings and the home screen re-opens it.
 - Always allowed: default Phone and Messages apps, the home screen, Settings and ChessLock.
+- **No easy way out**: unblocking an app or turning protection off costs a puzzle first.
+  Blocking is free.
 - The challenge screen always has **Phone**, **Messages** and **Home** buttons.
 
 ## Install & set up
@@ -80,13 +92,14 @@ On the phone:
 android/app/src/main/java/com/chesslock/
   AppBlockerService.kt   AccessibilityService: foreground app + unlock detection, session rules
   ChallengeActivity.kt   Separate task that hosts the JS challenge over other apps
+  Reminders.kt           Monday 9:00 "pick your focus" notification (AlarmManager)
   ChessLockModule.kt     TurboModule (spec: specs/NativeChessLock.ts)
   SystemApps.kt          Phone / SMS / launcher / keyboard detection
 src/
   chess/Board.tsx        SVG board: tap or drag, animations, arrows, promotion
   components/            PuzzleTrainer, OpeningTrainer, TrainingSession
-  engine/                schedule (3-day / weekly cycles), puzzle picking & rating
-  screens/               Today, Learn, Apps, Settings, Challenge
+  engine/                schedule (week focus, Sunday revision), puzzle picking & rating, review
+  screens/               Today, Apps, Settings, Challenge
   data/                  puzzles.json, openings.json (generated), themes.ts
 scripts/
   build_puzzles.py       lichess puzzle DB → src/data/puzzles.json
